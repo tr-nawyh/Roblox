@@ -1,0 +1,2172 @@
+local GLOBAL = ((type(getgenv) == "function") and getgenv()) or _G;
+if GLOBAL.__HWAN_HUB_CLEANUP then
+	pcall(GLOBAL.__HWAN_HUB_CLEANUP);
+	GLOBAL.__HWAN_HUB_CLEANUP = nil;
+end
+local Players = game:GetService("Players");
+local UserInputService = game:GetService("UserInputService");
+local TweenService = game:GetService("TweenService");
+local ReplicatedStorage = game:GetService("ReplicatedStorage");
+local RunService = game:GetService("RunService");
+local player = Players.LocalPlayer;
+local playerGui = player:WaitForChild("PlayerGui");
+for _, guiName in ipairs({"HWAN HUB","Black Grimoire"}) do
+	local oldGui = playerGui:FindFirstChild(guiName);
+	if oldGui then
+		pcall(function()
+			oldGui:Destroy();
+		end);
+	end
+end
+local runtimeAlive = true;
+local connections = {};
+local function connect(signal, callback)
+	local connection = signal:Connect(function(...)
+		if not runtimeAlive then
+			return;
+		end
+		callback(...);
+	end);
+	table.insert(connections, connection);
+	return connection;
+end
+local destroyMobMotion, createMobMotion, updateMobMotion;
+local destroyFlightCourseMotion, createFlightCourseMotion, updateFlightCourseMotion;
+local destroyChestMotion, createChestMotion, updateChestMotion;
+local setNoClip;
+local function cleanup()
+	if not runtimeAlive then
+		return;
+	end
+	runtimeAlive = false;
+	destroyMobMotion();
+	destroyFlightCourseMotion();
+	destroyChestMotion();
+	local character = player.Character;
+	if character then
+		setNoClip(character, false);
+	end
+	for _, connection in ipairs(connections) do
+		pcall(function()
+			connection:Disconnect();
+		end);
+	end
+	table.clear(connections);
+	local oldGui = playerGui:FindFirstChild("HWAN HUB");
+	if oldGui then
+		pcall(function()
+			oldGui:Destroy();
+		end);
+	end
+end
+GLOBAL.__HWAN_HUB_CLEANUP = cleanup;
+local SKILL_INTERVAL = 0.1;
+local SPECIAL_SKILL_INTERVAL = 0.2;
+local QUEST_RETRY_DELAY = 0.25;
+local MOB_FLY_SPEED = 300;
+local MOB_RESPONSIVENESS = 100;
+local FLIGHT_COURSE_SPEED = 300;
+local FLIGHT_COURSE_START_POSITION = CFrame.new(-5215.213, -31.444, -1824.639);
+local FLIGHT_COURSE_POINTS = {CFrame.new(-5214.92139, -14.128602, -1798.97986, -0.983969808, 0.176275775, -0.0270414203, -0.0000059455633, -0.151663065, -0.988432527, -0.178337842, -0.972587109, 0.149232328),CFrame.new(-5219.00195, -8.59703445, -1746.0614, -0.998739481, 0.0498135462, -0.00616583414, 0.00004655309, -0.12192142, -0.992539763, -0.0501936674, -0.9912889, 0.121765554),CFrame.new(-5205.90283, -0.325652421, -1673.0437, -0.857723951, -0.512401223, 0.0418886095, 0.000038206577, -0.081541419, -0.996669948, 0.514110565, -0.854866087, 0.0699595213),CFrame.new(-5136.1377, -1.13850462, -1587.54871, -0.753607988, -0.653974354, -0.0662769079, -0.000061273575, 0.100898266, -0.99489677, 0.657324195, -0.749758005, -0.0760778189),CFrame.new(-5020.42188, -17.9951744, -1446.29541, -0.791751027, -0.606910944, 0.0692043006, -0.000012546778, -0.11327672, -0.993563414, 0.610843778, -0.786655784, 0.0896793604),CFrame.new(-4893.77393, 76.3727951, -1223.99036, -0.954558849, -0.255375743, 0.153625786, 0.000013768673, -0.51552093, -0.856877029, 0.298022896, -0.817937315, 0.492098451),CFrame.new(-4955.24658, 317.492188, -973.901184, -0.79709065, 0.344225228, -0.496140927, -0.0000033676624, -0.821618557, -0.570037901, -0.603859901, -0.454370111, 0.654905379),CFrame.new(-5108.43262, 703.487732, -841.419006, -0.474856138, 0.401875466, -0.782948494, -0.000043213367, -0.889660835, -0.456622899, -0.880063772, -0.216796219, 0.422477663),CFrame.new(-5448.33789, 1060.96008, -772.612549, -0.0062469244, 0.940899611, -0.338627994, -0.00006365776, -0.338634968, -0.94091785, -0.999980509, -0.00585633516, 0.00217533112),CFrame.new(-5644.13037, 1045.24097, -806.234924, 0.367744327, 0.888876975, 0.273243487, -0.29774338, 0.39091146, -0.870940387, -0.880972803, 0.238926947, 0.408412635),CFrame.new(-5808.74023, 343.177826, -851.258118, 0.669878185, 0.116217516, 0.733318985, -0.0000025182962, 0.987673879, -0.156525776, -0.742471039, 0.10485135, 0.661621451),CFrame.new(-5888.88916, 39.7281952, -877.187012, 0.477438331, 0.666920543, 0.57207489, -0.189038724, 0.713790357, -0.674364686, -0.858089209, 0.213823259, 0.466864645),CFrame.new(-6073.77344, -36.233326, -999.897705, 0.943346143, 0.321331233, 0.0827301294, 0.0000019669533, 0.249324203, -0.968420029, -0.331810236, 0.913555503, 0.235198379),CFrame.new(-6000.35938, -50.9149284, -1204.23291, 0.887411296, -0.460930169, 0.00667348504, -0.000032544136, -0.0145394802, -0.999894261, 0.460978478, 0.8873173, -0.0129175186),CFrame.new(-5895.66016, -35.3302307, -1362.8418, 0.765182137, -0.635279179, 0.104482412, -0.000005990267, -0.162293673, -0.986742496, 0.643813848, 0.755037069, -0.124188066),CFrame.new(-5784.95801, -0.487844706, -1482.19727, 0.626070917, -0.758311749, 0.181654721, 0.000028699636, -0.232938051, -0.972491562, 0.779766083, 0.608853877, -0.145813942),CFrame.new(-5691.70898, 29.1840477, -1557.40906, 0.641671181, -0.761208892, 0.0939100087, 0.000035494566, -0.122411847, -0.992479444, 0.766979814, 0.636848807, -0.0785211325),CFrame.new(-5608.51074, 36.0029678, -1595.52942, 0.423757315, -0.905200601, -0.0322744548, 0.000040382147, 0.0356507301, -0.999364257, 0.905775785, 0.42348659, 0.0151438713),CFrame.new(-5506.7041, 22.1542053, -1655.55969, 0.502211332, -0.84854877, -0.166579396, -0.0000113248825, 0.192627788, -0.981271863, 0.864744902, 0.492807746, 0.0967302322),CFrame.new(-5362.47852, -2.81956005, -1737.80383, 0.482597828, -0.869819403, -0.102535278, 0.000022172928, 0.117082655, -0.993122101, 0.875842094, 0.47927627, 0.0565230846),CFrame.new(-5269.61426, -15.7301559, -1797.17603, 0.61367768, -0.784128189, -0.0924265981, -0.0275440514, 0.0957288742, -0.99502635, 0.78907609, 0.61317122, 0.0371485949)};
+local QUESTS = {{Name="Defeat Thief (Lv.125)",Level=125,MobName="Thief",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="DefeatThief",Type="questpls",NpcName="Johnny"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Thieves)",Type="SetSpawn",NpcName="Joe (Thieves)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Slime (Lv.300)",Level=300,MobName="Slime",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="DefeatSlime",Type="questpls",NpcName="DFiveX"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Fields)",Type="SetSpawn",NpcName="Joe (Forest)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Fire Boar (Lv.500)",Level=500,MobName="Fire Boar",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="DefeatFire Boar",Type="questpls",NpcName="Renna"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Fields)",Type="SetSpawn",NpcName="Joe (Forest)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Golem (Lv.1200)",Level=1200,MobName="Golem",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="DefeatGolem",Type="questpls",NpcName="Davrqwy"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Magical Forest)",Type="SetSpawn",NpcName="Joe (Golems)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Auto Flight Course (Lv.1400)",Level=1400,MobName=nil,IsFlightCourse=true,ReceiveQuest=function()
+	receiveFlightCourseQuest();
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Witch Village)",Type="SetSpawn",NpcName="Joe (Witch Village)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Collect Blood (Lv.1800)",Level=1800,MobName="Licht",ForceSkill="Syringe",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="CollectBlood",Type="questpls",NpcName="kailan10089"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Fields)",Type="SetSpawn",NpcName="Joe (Fields)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Security Golem (Lv.2000)",Level=2000,MobName="Security Golem",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="DefeatSecurity Golem",Type="questpls"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Witch Village)",Type="SetSpawn",NpcName="Joe (Witch Village)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Witch Queen (Lv.8500)",Level=8500,MobName="Witch Queen",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="Witch Queen",Type="questpls",NpcName="Venessa"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Witch Village)",Type="SetSpawn",NpcName="Joe (Witch Village)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end},{Name="Defeat Licht (Lv.9000)",Level=9000,MobName="Licht",ReceiveQuest=function()
+	local args = {"changeLightingToC",{Extra="Licht",Type="questpls",NpcName="Patolli"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end,SetSpawn=function()
+	local args = {"changeLightingToC",{Extra="Joe (Fields)",Type="SetSpawn",NpcName="Joe (Fields)"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end}};
+local selectedQuest = nil;
+local selectedSkill = nil;
+local selectedMob = nil;
+local currentMobTarget = nil;
+local selectedAngle = "Behind";
+local selectedDistance = 4;
+local autoQuestEnabled = false;
+local autoMobEnabled = false;
+local autoFlightCourseEnabled = false;
+local autoTrainBodyEnabled = false;
+local autoChestEnabled = false;
+local questNeedsSpawnReset = false;
+local questSpawnResetInProgress = false;
+local questReceiveLock = false;
+local questSwitching = false;
+local unquesting = false;
+local noClipState = {};
+local mobControl = {TargetPart=nil,TargetAttachment=nil,RootAttachment=nil,AlignPosition=nil,AlignOrientation=nil,LastFolder=nil,LastAutoRotate=nil,NoClipCharacter=nil};
+local flightCourseControl = {TargetPart=nil,TargetAttachment=nil,RootAttachment=nil,AlignPosition=nil,AlignOrientation=nil,LastAutoRotate=nil,NoClipCharacter=nil};
+local chestControl = {TargetPart=nil,TargetAttachment=nil,RootAttachment=nil,AlignPosition=nil,AlignOrientation=nil,LastAutoRotate=nil,NoClipCharacter=nil};
+local flightCourseStage = "start";
+local flightCoursePointIndex = 1;
+local flightCourseWaitUntil = 0;
+local flightCourseStartDelay = 0;
+local COLORS = {Black=Color3.fromRGB(8, 8, 9),Dark=Color3.fromRGB(13, 13, 14),Panel=Color3.fromRGB(19, 19, 21),Panel2=Color3.fromRGB(27, 27, 29),Panel3=Color3.fromRGB(34, 34, 37),Gray=Color3.fromRGB(66, 66, 70),Gray2=Color3.fromRGB(92, 92, 97),Muted=Color3.fromRGB(125, 125, 130),LightGray=Color3.fromRGB(185, 185, 190),White=Color3.fromRGB(242, 242, 244),BlackText=Color3.fromRGB(12, 12, 13)};
+local TWEEN_FAST = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out);
+local TWEEN_SMOOTH = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out);
+local gui = Instance.new("ScreenGui");
+gui.Name = "HWAN HUB";
+gui.ResetOnSpawn = false;
+gui.IgnoreGuiInset = true;
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
+gui.DisplayOrder = 9999;
+gui.Parent = playerGui;
+local main = Instance.new("Frame");
+main.Name = "Main";
+main.Size = UDim2.fromOffset(320, 360);
+main.AnchorPoint = Vector2.new(0.5, 0.5);
+main.Position = UDim2.new(0.5, 0, 0.5, 0);
+main.BackgroundColor3 = COLORS.Dark;
+main.BorderSizePixel = 0;
+main.Active = true;
+main.ClipsDescendants = true;
+main.Parent = gui;
+local mainScale = Instance.new("UIScale");
+mainScale.Scale = 0.8;
+mainScale.Parent = main;
+local mainCorner = Instance.new("UICorner");
+mainCorner.CornerRadius = UDim.new(0, 15);
+mainCorner.Parent = main;
+local mainStroke = Instance.new("UIStroke");
+mainStroke.Color = COLORS.Panel3;
+mainStroke.Thickness = 1;
+mainStroke.Parent = main;
+local header = Instance.new("Frame");
+header.Size = UDim2.new(1, 0, 0, 52);
+header.BackgroundColor3 = COLORS.Panel;
+header.BorderSizePixel = 0;
+header.Active = true;
+header.ZIndex = 3;
+header.Parent = main;
+local headerCorner = Instance.new("UICorner");
+headerCorner.CornerRadius = UDim.new(0, 15);
+headerCorner.Parent = header;
+local headerBottom = Instance.new("Frame");
+headerBottom.Size = UDim2.new(1, 0, 0, 13);
+headerBottom.Position = UDim2.new(0, 0, 1, -13);
+headerBottom.BackgroundColor3 = COLORS.Panel;
+headerBottom.BorderSizePixel = 0;
+headerBottom.Parent = header;
+local title = Instance.new("TextLabel");
+title.Size = UDim2.new(1, -24, 0, 20);
+title.Position = UDim2.fromOffset(12, 7);
+title.BackgroundTransparency = 1;
+title.Text = "HWAN HUB";
+title.TextColor3 = COLORS.White;
+title.TextSize = 16;
+title.Font = Enum.Font.GothamBold;
+title.TextXAlignment = Enum.TextXAlignment.Left;
+title.Parent = header;
+local subtitle = Instance.new("TextLabel");
+subtitle.Size = UDim2.new(1, -24, 0, 14);
+subtitle.Position = UDim2.fromOffset(12, 28);
+subtitle.BackgroundTransparency = 1;
+subtitle.Text = "Black Grimoire";
+subtitle.TextColor3 = COLORS.Muted;
+subtitle.TextSize = 9;
+subtitle.Font = Enum.Font.GothamMedium;
+subtitle.TextXAlignment = Enum.TextXAlignment.Left;
+subtitle.Parent = header;
+local function makeDraggable(handle, target)
+	local dragging = false;
+	local dragStart;
+	local startPosition;
+	local dragged = false;
+	connect(handle.InputBegan, function(input)
+		if ((input.UserInputType ~= Enum.UserInputType.MouseButton1) and (input.UserInputType ~= Enum.UserInputType.Touch)) then
+			return;
+		end
+		dragging = true;
+		dragged = false;
+		dragStart = input.Position;
+		startPosition = target.Position;
+	end);
+	connect(UserInputService.InputChanged, function(input)
+		if not dragging then
+			return;
+		end
+		if ((input.UserInputType ~= Enum.UserInputType.MouseMovement) and (input.UserInputType ~= Enum.UserInputType.Touch)) then
+			return;
+		end
+		local delta = input.Position - dragStart;
+		if ((math.abs(delta.X) > 4) or (math.abs(delta.Y) > 4)) then
+			dragged = true;
+		end
+		target.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y);
+	end);
+	connect(UserInputService.InputEnded, function(input)
+		if ((input.UserInputType == Enum.UserInputType.MouseButton1) or (input.UserInputType == Enum.UserInputType.Touch)) then
+			dragging = false;
+		end
+	end);
+	return function()
+		return dragged;
+	end;
+end
+makeDraggable(header, main);
+local pageBar = Instance.new("Frame");
+pageBar.Size = UDim2.new(1, -22, 0, 34);
+pageBar.Position = UDim2.fromOffset(11, 61);
+pageBar.BackgroundTransparency = 1;
+pageBar.ZIndex = 4;
+pageBar.Parent = main;
+local function createPageButton(text, position)
+	local button = Instance.new("TextButton");
+	button.Size = UDim2.new(0.5, -4, 1, 0);
+	button.Position = position;
+	button.BackgroundColor3 = COLORS.Panel2;
+	button.BorderSizePixel = 0;
+	button.Text = text;
+	button.TextColor3 = COLORS.Muted;
+	button.TextSize = 10;
+	button.Font = Enum.Font.GothamBold;
+	button.AutoButtonColor = false;
+	button.ZIndex = 4;
+	button.Parent = pageBar;
+	local corner = Instance.new("UICorner");
+	corner.CornerRadius = UDim.new(0, 8);
+	corner.Parent = button;
+	return button;
+end
+local autoFarmPageButton = createPageButton("AUTO FARM", UDim2.fromOffset(0, 0));
+local miscPageButton = createPageButton("MISC", UDim2.new(0.5, 4, 0, 0));
+local pageContainer = Instance.new("Frame");
+pageContainer.Size = UDim2.new(1, -22, 1, -105);
+pageContainer.Position = UDim2.fromOffset(11, 100);
+pageContainer.BackgroundTransparency = 1;
+pageContainer.ClipsDescendants = true;
+pageContainer.Parent = main;
+local function createScrollPage()
+	local page = Instance.new("ScrollingFrame");
+	page.Size = UDim2.new(1, 0, 1, 0);
+	page.Position = UDim2.fromOffset(0, 0);
+	page.BackgroundTransparency = 1;
+	page.BorderSizePixel = 0;
+	page.CanvasSize = UDim2.fromOffset(0, 0);
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y;
+	page.ScrollBarThickness = 3;
+	page.ScrollBarImageColor3 = COLORS.Gray;
+	page.ScrollBarImageTransparency = 0.1;
+	page.ScrollingDirection = Enum.ScrollingDirection.Y;
+	page.ScrollingEnabled = true;
+	page.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable;
+	page.Active = true;
+	page.ClipsDescendants = true;
+	page.Parent = pageContainer;
+	local padding = Instance.new("UIPadding");
+	padding.PaddingTop = UDim.new(0, 2);
+	padding.PaddingBottom = UDim.new(0, 10);
+	padding.PaddingLeft = UDim.new(0, 1);
+	padding.PaddingRight = UDim.new(0, 4);
+	padding.Parent = page;
+	local layout = Instance.new("UIListLayout");
+	layout.Padding = UDim.new(0, 8);
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
+	layout.SortOrder = Enum.SortOrder.LayoutOrder;
+	layout.Parent = page;
+	return page;
+end
+local autoFarmPage = createScrollPage();
+local miscPage = createScrollPage();
+miscPage.Visible = false;
+local function createSection(parent, titleText)
+	local section = Instance.new("Frame");
+	section.Size = UDim2.new(1, 0, 0, 0);
+	section.AutomaticSize = Enum.AutomaticSize.Y;
+	section.BackgroundColor3 = COLORS.Panel;
+	section.BorderSizePixel = 0;
+	section.LayoutOrder = 1;
+	section.Parent = parent;
+	local corner = Instance.new("UICorner");
+	corner.CornerRadius = UDim.new(0, 11);
+	corner.Parent = section;
+	local stroke = Instance.new("UIStroke");
+	stroke.Color = COLORS.Panel3;
+	stroke.Thickness = 1;
+	stroke.Transparency = 0.4;
+	stroke.Parent = section;
+	local padding = Instance.new("UIPadding");
+	padding.PaddingTop = UDim.new(0, 9);
+	padding.PaddingBottom = UDim.new(0, 10);
+	padding.PaddingLeft = UDim.new(0, 9);
+	padding.PaddingRight = UDim.new(0, 9);
+	padding.Parent = section;
+	local layout = Instance.new("UIListLayout");
+	layout.Padding = UDim.new(0, 7);
+	layout.SortOrder = Enum.SortOrder.LayoutOrder;
+	layout.Parent = section;
+	local label = Instance.new("TextLabel");
+	label.Size = UDim2.new(1, 0, 0, 18);
+	label.BackgroundTransparency = 1;
+	label.Text = titleText;
+	label.TextColor3 = COLORS.White;
+	label.TextSize = 11;
+	label.Font = Enum.Font.GothamBold;
+	label.TextXAlignment = Enum.TextXAlignment.Left;
+	label.LayoutOrder = 1;
+	label.Parent = section;
+	return section;
+end
+local function createToggle(parent, titleText, descriptionText)
+	local row = Instance.new("Frame");
+	row.Size = UDim2.new(1, 0, 0, 48);
+	row.BackgroundColor3 = COLORS.Panel2;
+	row.BorderSizePixel = 0;
+	row.LayoutOrder = 2;
+	row.Parent = parent;
+	local corner = Instance.new("UICorner");
+	corner.CornerRadius = UDim.new(0, 9);
+	corner.Parent = row;
+	local titleLabel = Instance.new("TextLabel");
+	titleLabel.Size = UDim2.new(1, -75, 0, 16);
+	titleLabel.Position = UDim2.fromOffset(11, 7);
+	titleLabel.BackgroundTransparency = 1;
+	titleLabel.Text = titleText;
+	titleLabel.TextColor3 = COLORS.White;
+	titleLabel.TextSize = 11;
+	titleLabel.Font = Enum.Font.GothamMedium;
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left;
+	titleLabel.Parent = row;
+	local descriptionLabel = Instance.new("TextLabel");
+	descriptionLabel.Size = UDim2.new(1, -75, 0, 14);
+	descriptionLabel.Position = UDim2.fromOffset(11, 24);
+	descriptionLabel.BackgroundTransparency = 1;
+	descriptionLabel.Text = descriptionText;
+	descriptionLabel.TextColor3 = COLORS.Muted;
+	descriptionLabel.TextSize = 8;
+	descriptionLabel.Font = Enum.Font.Gotham;
+	descriptionLabel.TextXAlignment = Enum.TextXAlignment.Left;
+	descriptionLabel.TextTruncate = Enum.TextTruncate.AtEnd;
+	descriptionLabel.Parent = row;
+	local toggle = Instance.new("TextButton");
+	toggle.Size = UDim2.fromOffset(46, 24);
+	toggle.Position = UDim2.new(1, -56, 0.5, -12);
+	toggle.BackgroundColor3 = COLORS.Gray;
+	toggle.BorderSizePixel = 0;
+	toggle.Text = "";
+	toggle.AutoButtonColor = false;
+	toggle.Parent = row;
+	local toggleCorner = Instance.new("UICorner");
+	toggleCorner.CornerRadius = UDim.new(1, 0);
+	toggleCorner.Parent = toggle;
+	local knob = Instance.new("Frame");
+	knob.Size = UDim2.fromOffset(18, 18);
+	knob.Position = UDim2.fromOffset(3, 3);
+	knob.BackgroundColor3 = COLORS.White;
+	knob.BorderSizePixel = 0;
+	knob.Parent = toggle;
+	local knobCorner = Instance.new("UICorner");
+	knobCorner.CornerRadius = UDim.new(1, 0);
+	knobCorner.Parent = knob;
+	return {Row=row,Toggle=toggle,Knob=knob,Description=descriptionLabel};
+end
+local function setToggle(data, enabled)
+	if enabled then
+		TweenService:Create(data.Toggle, TWEEN_FAST, {BackgroundColor3=COLORS.White}):Play();
+		TweenService:Create(data.Knob, TWEEN_FAST, {Position=UDim2.new(1, -21, 0, 3),BackgroundColor3=COLORS.Black}):Play();
+	else
+		TweenService:Create(data.Toggle, TWEEN_FAST, {BackgroundColor3=COLORS.Gray}):Play();
+		TweenService:Create(data.Knob, TWEEN_FAST, {Position=UDim2.fromOffset(3, 3),BackgroundColor3=COLORS.White}):Play();
+	end
+end
+local function clearDropdownList(dropdownData)
+	for _, child in ipairs(dropdownData.List:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy();
+		end
+	end
+	dropdownData.List.CanvasSize = UDim2.fromOffset(0, 0);
+end
+local DROPDOWNS = {};
+local function positionDropdown(dropdownData)
+	if not runtimeAlive then
+		return;
+	end
+	if not dropdownData.List.Visible then
+		return;
+	end
+	local button = dropdownData.Button;
+	local list = dropdownData.List;
+	local buttonPos = button.AbsolutePosition;
+	local buttonSize = button.AbsoluteSize;
+	local camera = workspace.CurrentCamera;
+	local viewportSize = (camera and camera.ViewportSize) or Vector2.new(800, 600);
+	local listWidth = buttonSize.X;
+	local listHeight = 108;
+	local x = buttonPos.X;
+	local y = buttonPos.Y + buttonSize.Y + 6;
+	if ((x + listWidth) > (viewportSize.X - 6)) then
+		x = (viewportSize.X - listWidth) - 6;
+	end
+	if (x < 6) then
+		x = 6;
+	end
+	if ((y + listHeight) > (viewportSize.Y - 6)) then
+		local aboveY = (buttonPos.Y - listHeight) - 6;
+		if (aboveY >= 6) then
+			y = aboveY;
+		else
+			y = math.max(6, (viewportSize.Y - listHeight) - 6);
+		end
+	end
+	list.Size = UDim2.fromOffset(math.floor(listWidth), listHeight);
+	list.Position = UDim2.fromOffset(math.floor(x), math.floor(y));
+end
+local function closeAllDropdowns(except)
+	for _, dropdownData in ipairs(DROPDOWNS) do
+		if ((dropdownData ~= except) and dropdownData.List.Visible) then
+			dropdownData.List.Visible = false;
+			dropdownData.Arrow.Rotation = 45;
+		end
+	end
+end
+local function createDropdown(parent, labelText, placeholder)
+	local container = Instance.new("Frame");
+	container.Size = UDim2.new(1, 0, 0, 65);
+	container.BackgroundTransparency = 1;
+	container.LayoutOrder = 2;
+	container.Parent = parent;
+	local label = Instance.new("TextLabel");
+	label.Size = UDim2.new(1, 0, 0, 13);
+	label.BackgroundTransparency = 1;
+	label.Text = labelText;
+	label.TextColor3 = COLORS.Muted;
+	label.TextSize = 8;
+	label.Font = Enum.Font.GothamMedium;
+	label.TextXAlignment = Enum.TextXAlignment.Left;
+	label.Parent = container;
+	local button = Instance.new("TextButton");
+	button.Size = UDim2.new(1, 0, 0, 37);
+	button.Position = UDim2.fromOffset(0, 18);
+	button.BackgroundColor3 = COLORS.Panel2;
+	button.BorderSizePixel = 0;
+	button.Text = placeholder;
+	button.TextColor3 = COLORS.White;
+	button.TextSize = 10;
+	button.Font = Enum.Font.GothamMedium;
+	button.TextXAlignment = Enum.TextXAlignment.Left;
+	button.AutoButtonColor = false;
+	button.ZIndex = 10;
+	button.Parent = container;
+	local corner = Instance.new("UICorner");
+	corner.CornerRadius = UDim.new(0, 9);
+	corner.Parent = button;
+	local padding = Instance.new("UIPadding");
+	padding.PaddingLeft = UDim.new(0, 11);
+	padding.PaddingRight = UDim.new(0, 28);
+	padding.Parent = button;
+	local arrow = Instance.new("Frame");
+	arrow.Size = UDim2.fromOffset(6, 6);
+	arrow.Position = UDim2.new(1, -20, 0.5, -4);
+	arrow.BackgroundColor3 = COLORS.Muted;
+	arrow.BorderSizePixel = 0;
+	arrow.Rotation = 45;
+	arrow.ZIndex = 11;
+	arrow.Parent = button;
+	local list = Instance.new("ScrollingFrame");
+	list.Size = UDim2.fromOffset(200, 108);
+	list.Position = UDim2.fromOffset(0, 0);
+	list.BackgroundColor3 = COLORS.Panel3;
+	list.BorderSizePixel = 0;
+	list.Visible = false;
+	list.ScrollBarThickness = 2;
+	list.ScrollBarImageColor3 = COLORS.Gray2;
+	list.ScrollingDirection = Enum.ScrollingDirection.Y;
+	list.CanvasSize = UDim2.fromOffset(0, 0);
+	list.Active = true;
+	list.ClipsDescendants = true;
+	list.ZIndex = 200;
+	list.Parent = gui;
+	local listCorner = Instance.new("UICorner");
+	listCorner.CornerRadius = UDim.new(0, 9);
+	listCorner.Parent = list;
+	local listStroke = Instance.new("UIStroke");
+	listStroke.Color = COLORS.Gray;
+	listStroke.Thickness = 1;
+	listStroke.Transparency = 0.4;
+	listStroke.Parent = list;
+	local dropdownData = {Container=container,Label=label,Button=button,Arrow=arrow,List=list,Placeholder=placeholder,SelectedValue=nil};
+	table.insert(DROPDOWNS, dropdownData);
+	return dropdownData;
+end
+local function addDropdownOption(dropdownData, text, callback)
+	local currentButtons = 0;
+	for _, child in ipairs(dropdownData.List:GetChildren()) do
+		if child:IsA("TextButton") then
+			currentButtons += 1
+		end
+	end
+	local rowHeight = 34;
+	local option = Instance.new("TextButton");
+	option.Size = UDim2.new(1, -4, 0, rowHeight);
+	option.Position = UDim2.fromOffset(0, currentButtons * rowHeight);
+	option.BackgroundColor3 = COLORS.Panel3;
+	option.BackgroundTransparency = 1;
+	option.BorderSizePixel = 0;
+	option.Text = text;
+	option.TextColor3 = COLORS.White;
+	option.TextSize = 10;
+	option.Font = Enum.Font.Gotham;
+	option.TextXAlignment = Enum.TextXAlignment.Left;
+	option.AutoButtonColor = false;
+	option.Active = true;
+	option.ZIndex = 201;
+	option.Parent = dropdownData.List;
+	local optionPadding = Instance.new("UIPadding");
+	optionPadding.PaddingLeft = UDim.new(0, 10);
+	optionPadding.Parent = option;
+	connect(option.MouseEnter, function()
+		if not runtimeAlive then
+			return;
+		end
+		TweenService:Create(option, TWEEN_FAST, {BackgroundTransparency=0}):Play();
+	end);
+	connect(option.MouseLeave, function()
+		if not runtimeAlive then
+			return;
+		end
+		TweenService:Create(option, TWEEN_FAST, {BackgroundTransparency=1}):Play();
+	end);
+	connect(option.Activated, function()
+		if not runtimeAlive then
+			return;
+		end
+		callback();
+		dropdownData.List.Visible = false;
+		dropdownData.Arrow.Rotation = 45;
+	end);
+	dropdownData.List.CanvasSize = UDim2.fromOffset(0, (currentButtons + 1) * rowHeight);
+end
+local function setupDropdown(dropdownData, refreshFunction)
+	connect(dropdownData.Button.Activated, function()
+		if not runtimeAlive then
+			return;
+		end
+		if refreshFunction then
+			refreshFunction();
+		end
+		local willOpen = not dropdownData.List.Visible;
+		if willOpen then
+			closeAllDropdowns(dropdownData);
+			dropdownData.List.Visible = true;
+			dropdownData.Arrow.Rotation = 135;
+			task.defer(function()
+				if (runtimeAlive and dropdownData.List.Visible) then
+					positionDropdown(dropdownData);
+				end
+			end);
+		else
+			dropdownData.List.Visible = false;
+			dropdownData.Arrow.Rotation = 45;
+		end
+	end);
+	connect(RunService.RenderStepped, function()
+		if (runtimeAlive and dropdownData.List.Visible) then
+			positionDropdown(dropdownData);
+		end
+	end);
+end
+local farmConfig = createSection(autoFarmPage, "Farm Config");
+local skillDropdown = createDropdown(farmConfig, "SELECT SKILL", "Select Skill");
+local angleDropdown = createDropdown(farmConfig, "ATTACK ANGLE", "Behind");
+local distanceDropdown = createDropdown(farmConfig, "DISTANCE", "4");
+local autoMobSection = createSection(autoFarmPage, "Auto Mob");
+local mobDropdown = createDropdown(autoMobSection, "SELECT MOB", "Select Mob");
+local autoMobToggle = createToggle(autoMobSection, "Auto Mob", "Select a mob first");
+local autoQuestSection = createSection(autoFarmPage, "Auto Quest");
+local questDropdown = createDropdown(autoQuestSection, "SELECT QUEST", "Select Quest");
+local autoQuestToggle = createToggle(autoQuestSection, "Auto Quest", "Select a quest first");
+local autoTrainBodySection = createSection(autoFarmPage, "Auto Train Body");
+local autoTrainBodyToggle = createToggle(autoTrainBodySection, "Auto Train (Lv.200)", "Train body automatically");
+autoTrainBodyToggle.Row.LayoutOrder = 2;
+local checkBodyProgressButton = Instance.new("TextButton");
+checkBodyProgressButton.Size = UDim2.new(1, 0, 0, 37);
+checkBodyProgressButton.BackgroundColor3 = COLORS.Panel2;
+checkBodyProgressButton.BorderSizePixel = 0;
+checkBodyProgressButton.Text = "Check Body Progress";
+checkBodyProgressButton.TextColor3 = COLORS.White;
+checkBodyProgressButton.TextSize = 10;
+checkBodyProgressButton.Font = Enum.Font.GothamMedium;
+checkBodyProgressButton.AutoButtonColor = false;
+checkBodyProgressButton.LayoutOrder = 3;
+checkBodyProgressButton.Parent = autoTrainBodySection;
+local checkBodyCorner = Instance.new("UICorner");
+checkBodyCorner.CornerRadius = UDim.new(0, 9);
+checkBodyCorner.Parent = checkBodyProgressButton;
+local grimmoireStorageSection = createSection(miscPage, "Grimoire Storage");
+local grimoireStorageDropdown = createDropdown(grimmoireStorageSection, "SELECT STORAGE", "Select Storage");
+grimoireStorageDropdown.Container.LayoutOrder = 2;
+local spinGrimoireSection = createSection(miscPage, "Spin Grimoire");
+local spinGrimoireButton = Instance.new("TextButton");
+spinGrimoireButton.Size = UDim2.new(1, 0, 0, 37);
+spinGrimoireButton.BackgroundColor3 = COLORS.Panel2;
+spinGrimoireButton.BorderSizePixel = 0;
+spinGrimoireButton.Text = "Fast Spin";
+spinGrimoireButton.TextColor3 = COLORS.White;
+spinGrimoireButton.TextSize = 10;
+spinGrimoireButton.Font = Enum.Font.GothamMedium;
+spinGrimoireButton.AutoButtonColor = false;
+spinGrimoireButton.LayoutOrder = 2;
+spinGrimoireButton.Parent = spinGrimoireSection;
+local spinGrimoireCorner = Instance.new("UICorner");
+spinGrimoireCorner.CornerRadius = UDim.new(0, 9);
+spinGrimoireCorner.Parent = spinGrimoireButton;
+local spinGrimoireHint = Instance.new("TextLabel");
+spinGrimoireHint.Size = UDim2.new(1, 0, 0, 12);
+spinGrimoireHint.Position = UDim2.fromOffset(10, 39);
+spinGrimoireHint.BackgroundTransparency = 1;
+spinGrimoireHint.Text = "Tower Opening Required";
+spinGrimoireHint.TextColor3 = COLORS.Muted;
+spinGrimoireHint.TextSize = 8;
+spinGrimoireHint.Font = Enum.Font.Gotham;
+spinGrimoireHint.TextXAlignment = Enum.TextXAlignment.Left;
+spinGrimoireHint.TextTruncate = Enum.TextTruncate.AtEnd;
+spinGrimoireHint.Parent = spinGrimoireSection;
+local resetGrimoireButton = Instance.new("TextButton");
+resetGrimoireButton.Size = UDim2.new(1, 0, 0, 37);
+resetGrimoireButton.BackgroundColor3 = COLORS.Panel2;
+resetGrimoireButton.BorderSizePixel = 0;
+resetGrimoireButton.Text = "Reset Grimoire (500k Yules)";
+resetGrimoireButton.TextColor3 = COLORS.White;
+resetGrimoireButton.TextSize = 10;
+resetGrimoireButton.Font = Enum.Font.GothamMedium;
+resetGrimoireButton.AutoButtonColor = false;
+resetGrimoireButton.LayoutOrder = 3;
+resetGrimoireButton.Parent = spinGrimoireSection;
+local resetGrimoireCorner = Instance.new("UICorner");
+resetGrimoireCorner.CornerRadius = UDim.new(0, 9);
+resetGrimoireCorner.Parent = resetGrimoireButton;
+local miscSection = createSection(miscPage, "Misc");
+local autoChestToggle = createToggle(miscSection, "Auto Chest", "Chests: 0");
+autoChestToggle.Row.LayoutOrder = 2;
+local upgradeWandButton = Instance.new("TextButton");
+upgradeWandButton.Size = UDim2.new(1, 0, 0, 37);
+upgradeWandButton.BackgroundColor3 = COLORS.Panel2;
+upgradeWandButton.BorderSizePixel = 0;
+upgradeWandButton.Text = "Upgrade Wand";
+upgradeWandButton.TextColor3 = COLORS.White;
+upgradeWandButton.TextSize = 10;
+upgradeWandButton.Font = Enum.Font.GothamMedium;
+upgradeWandButton.AutoButtonColor = false;
+upgradeWandButton.LayoutOrder = 3;
+upgradeWandButton.Parent = miscSection;
+local upgradeWandCorner = Instance.new("UICorner");
+upgradeWandCorner.CornerRadius = UDim.new(0, 9);
+upgradeWandCorner.Parent = upgradeWandButton;
+local function getSkills()
+	local skillMap = {};
+	local backpack = player:FindFirstChild("Backpack");
+	local character = player.Character;
+	if backpack then
+		for _, item in ipairs(backpack:GetChildren()) do
+			if item:IsA("Tool") then
+				skillMap[item.Name] = item;
+			end
+		end
+	end
+	if character then
+		for _, item in ipairs(character:GetChildren()) do
+			if item:IsA("Tool") then
+				skillMap[item.Name] = item;
+			end
+		end
+	end
+	local skills = {};
+	for name in pairs(skillMap) do
+		table.insert(skills, name);
+	end
+	table.sort(skills, function(a, b)
+		return a:lower() < b:lower();
+	end);
+	return skills;
+end
+local function refreshSkillList()
+	clearDropdownList(skillDropdown);
+	local skills = getSkills();
+	if (#skills == 0) then
+		addDropdownOption(skillDropdown, "No skills found", function()
+		end);
+		if (skillDropdown.SelectedValue == nil) then
+			skillDropdown.Button.Text = skillDropdown.Placeholder;
+		end
+		return;
+	end
+	for _, skillName in ipairs(skills) do
+		addDropdownOption(skillDropdown, skillName, function()
+			skillDropdown.SelectedValue = skillName;
+			selectedSkill = skillName;
+			skillDropdown.Button.Text = skillName;
+		end);
+	end
+	if (selectedSkill and not table.find(skills, selectedSkill)) then
+		selectedSkill = nil;
+		skillDropdown.SelectedValue = nil;
+		skillDropdown.Button.Text = skillDropdown.Placeholder;
+	end
+	if (skillDropdown.SelectedValue == nil) then
+		skillDropdown.Button.Text = skillDropdown.Placeholder;
+	end
+end
+local function currentMissionIsEmpty()
+	local currentMission = player:FindFirstChild("CurrentMission");
+	if not currentMission then
+		return true;
+	end
+	return #currentMission:GetChildren() == 0;
+end
+local function unquest()
+	local args = {"unquest"};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function resetCharacter()
+	local args = {"please"};
+	ReplicatedStorage:WaitForChild("ResetCharacter"):FireServer(unpack(args));
+end
+local tryReceiveQuest;
+local function selectQuest(newQuest)
+	if not newQuest then
+		return;
+	end
+	if (selectedQuest and (selectedQuest.Name ~= newQuest.Name) and not currentMissionIsEmpty()) then
+		questSwitching = true;
+		questReceiveLock = false;
+		pcall(unquest);
+	end
+	selectedQuest = newQuest;
+	questDropdown.Button.Text = newQuest.Name;
+	autoQuestToggle.Description.Text = newQuest.Name;
+	questDropdown.SelectedValue = newQuest.Name;
+	if (autoQuestEnabled and selectedQuest) then
+		questNeedsSpawnReset = true;
+		if autoMobEnabled then
+			autoMobEnabled = false;
+			currentMobTarget = nil;
+			destroyMobMotion();
+			setToggle(autoMobToggle, false);
+			autoMobToggle.Description.Text = selectedMob or "Select a mob first";
+		end
+		if autoTrainBodyEnabled then
+			autoTrainBodyEnabled = false;
+			setToggle(autoTrainBodyToggle, false);
+			autoTrainBodyToggle.Description.Text = "Train body automatically";
+		end
+		if autoChestEnabled then
+			autoChestEnabled = false;
+			destroyChestMotion();
+			setToggle(autoChestToggle, false);
+			autoChestToggle.Description.Text = "Chests: 0";
+		end
+		if selectedQuest.IsFlightCourse then
+			autoFlightCourseEnabled = true;
+		else
+			autoFlightCourseEnabled = false;
+		end
+		task.spawn(function()
+			if not runtimeAlive then
+				return;
+			end
+			questSpawnResetInProgress = true;
+			if selectedQuest.SetSpawn then
+				pcall(selectedQuest.SetSpawn);
+			end
+			task.wait(0.5);
+			resetCharacter();
+			questSpawnResetInProgress = false;
+			questNeedsSpawnReset = false;
+		end);
+	end
+	task.defer(function()
+		if not runtimeAlive then
+			return;
+		end
+		local attempts = 0;
+		while not currentMissionIsEmpty() and (attempts < 20) do
+			attempts += 1
+			task.wait(0.05);
+		end
+		questSwitching = false;
+		if (autoQuestEnabled and not questNeedsSpawnReset) then
+			tryReceiveQuest();
+		end
+	end);
+end
+local function refreshQuestList()
+	clearDropdownList(questDropdown);
+	for _, quest in ipairs(QUESTS) do
+		addDropdownOption(questDropdown, quest.Name, function()
+			if (questDropdown.SelectedValue == quest.Name) then
+				questDropdown.SelectedValue = nil;
+				selectedQuest = nil;
+				questDropdown.Button.Text = questDropdown.Placeholder;
+				autoQuestToggle.Description.Text = "Select a quest first";
+				if autoQuestEnabled then
+					autoQuestEnabled = false;
+					questReceiveLock = false;
+					if autoMobEnabled then
+						autoMobEnabled = false;
+						currentMobTarget = nil;
+						destroyMobMotion();
+						setToggle(autoMobToggle, false);
+						autoMobToggle.Description.Text = selectedMob or "Select a mob first";
+					end
+					if autoFlightCourseEnabled then
+						autoFlightCourseEnabled = false;
+						destroyFlightCourseMotion();
+					end
+					setToggle(autoQuestToggle, false);
+				end
+			else
+				selectQuest(quest);
+			end
+		end);
+	end
+	if (questDropdown.SelectedValue == nil) then
+		questDropdown.Button.Text = questDropdown.Placeholder;
+	end
+end
+local function receiveTrainBodyQuest()
+	local args = {"changeLightingToC",{Extra="TrainBody",Type="questpls",NpcName="Asta"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function receiveFlightCourseQuest()
+	local args = {"changeLightingToC",{Extra="FlightCourse",Type="questpls",NpcName="ahmedBOOM234"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function receiveBodyProgress()
+	local args = {"changeLightingToC",{Extra="BodyProgress",Type="questpls",NpcName="Asta"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function openGrimoireStorage(storageType, npcName)
+	local args = {"changeLightingToC",{Extra="OPENSTORAGENOW",Type="questpls",Stuff=storageType,NpcName=npcName}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function resetGrimoire()
+	local args = {"quickResetGrimoire"};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function spinGrimoire()
+	local args = {"spinGrim"};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+local function upgradeWand()
+	local args = {"changeLightingToC",{Extra="OPENWANDNOW",Type="questpls",NpcName="gamerwatch2022"}};
+	ReplicatedStorage:WaitForChild("MainRemote"):FireServer(unpack(args));
+end
+function tryReceiveQuest()
+	if not runtimeAlive then
+		return;
+	end
+	if not autoQuestEnabled then
+		return;
+	end
+	if not selectedQuest then
+		return;
+	end
+	if questSwitching then
+		return;
+	end
+	if questReceiveLock then
+		return;
+	end
+	if (questNeedsSpawnReset or questSpawnResetInProgress) then
+		return;
+	end
+	if selectedQuest.IsFlightCourse then
+		return;
+	end
+	if not currentMissionIsEmpty() then
+		return;
+	end
+	if unquesting then
+		return;
+	end
+	questReceiveLock = true;
+	pcall(function()
+		selectedQuest.ReceiveQuest();
+	end);
+	task.delay(QUEST_RETRY_DELAY, function()
+		if not runtimeAlive then
+			return;
+		end
+		questReceiveLock = false;
+		if (autoQuestEnabled and selectedQuest and not questSwitching and currentMissionIsEmpty() and not questNeedsSpawnReset and not selectedQuest.IsFlightCourse) then
+			tryReceiveQuest();
+		end
+	end);
+end
+local function getMobFolder()
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child.Name:match("^BadEntities%d+$") then
+			return child;
+		end
+	end
+	return nil;
+end
+local function getMobPivot(instance)
+	if (not instance or not instance.Parent) then
+		return nil;
+	end
+	local ok, pivot = pcall(function()
+		return instance:GetPivot();
+	end);
+	if ok then
+		return pivot;
+	end
+	return nil;
+end
+local function getAvailableMobNames()
+	local mobFolder = getMobFolder();
+	if not mobFolder then
+		return {};
+	end
+	local nameMap = {};
+	for _, mob in ipairs(mobFolder:GetChildren()) do
+		if (mob.Name and (mob.Name ~= "")) then
+			nameMap[mob.Name] = true;
+		end
+	end
+	local names = {};
+	for name in pairs(nameMap) do
+		table.insert(names, name);
+	end
+	table.sort(names, function(a, b)
+		return a:lower() < b:lower();
+	end);
+	return names;
+end
+local function getNextMobTarget(mobName)
+	local mobFolder = getMobFolder();
+	if (not mobFolder or not mobName) then
+		return nil;
+	end
+	for _, mob in ipairs(mobFolder:GetChildren()) do
+		if (mob.Name == mobName) then
+			local humanoid = mob:FindFirstChildOfClass("Humanoid");
+			if (humanoid and (humanoid.Health > 0)) then
+				return mob;
+			end
+		end
+	end
+	return nil;
+end
+local mobFolderConnections = {};
+local function disconnectMobFolderConnections()
+	for _, connection in ipairs(mobFolderConnections) do
+		pcall(function()
+			connection:Disconnect();
+		end);
+	end
+	table.clear(mobFolderConnections);
+end
+local function connectMobFolder(folder)
+	if not folder then
+		return;
+	end
+	disconnectMobFolderConnections();
+	mobControl.LastFolder = folder;
+	local childRemovedConnection = connect(folder.ChildRemoved, function(child)
+		if (not autoMobEnabled or not selectedMob) then
+			return;
+		end
+		if (child == currentMobTarget) then
+			currentMobTarget = getNextMobTarget(selectedMob);
+		end
+	end);
+	table.insert(mobFolderConnections, childRemovedConnection);
+end
+local function refreshMobFolderConnection()
+	local folder = getMobFolder();
+	if (folder ~= mobControl.LastFolder) then
+		if folder then
+			connectMobFolder(folder);
+		else
+			disconnectMobFolderConnections();
+			mobControl.LastFolder = nil;
+		end
+	end
+	return folder;
+end
+function setNoClip(character, enabled)
+	if not character then
+		return;
+	end
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if enabled then
+				if (noClipState[part] == nil) then
+					noClipState[part] = part.CanCollide;
+				end
+				part.CanCollide = false;
+			elseif (noClipState[part] ~= nil) then
+				part.CanCollide = noClipState[part];
+				noClipState[part] = nil;
+			end
+		end
+	end
+end
+local function applyNoClip()
+	if not (autoMobEnabled or autoFlightCourseEnabled or autoChestEnabled or (autoQuestEnabled and selectedQuest and (selectedQuest.MobName ~= nil))) then
+		return;
+	end
+	local character = player.Character;
+	if character then
+		setNoClip(character, true);
+	end
+end
+function destroyMobMotion()
+	if mobControl.AlignPosition then
+		pcall(function()
+			mobControl.AlignPosition:Destroy();
+		end);
+		mobControl.AlignPosition = nil;
+	end
+	if mobControl.AlignOrientation then
+		pcall(function()
+			mobControl.AlignOrientation:Destroy();
+		end);
+		mobControl.AlignOrientation = nil;
+	end
+	if mobControl.RootAttachment then
+		pcall(function()
+			mobControl.RootAttachment:Destroy();
+		end);
+		mobControl.RootAttachment = nil;
+	end
+	if mobControl.TargetAttachment then
+		pcall(function()
+			mobControl.TargetAttachment:Destroy();
+		end);
+		mobControl.TargetAttachment = nil;
+	end
+	if mobControl.TargetPart then
+		pcall(function()
+			mobControl.TargetPart:Destroy();
+		end);
+		mobControl.TargetPart = nil;
+	end
+	local character = player.Character;
+	if character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid");
+		local rootPart = character:FindFirstChild("HumanoidRootPart");
+		if (humanoid and (mobControl.LastAutoRotate ~= nil)) then
+			humanoid.AutoRotate = mobControl.LastAutoRotate;
+		end
+		if rootPart then
+			rootPart.AssemblyLinearVelocity = Vector3.zero;
+			rootPart.AssemblyAngularVelocity = Vector3.zero;
+		end
+	end
+	mobControl.LastAutoRotate = nil;
+	mobControl.NoClipCharacter = nil;
+end
+function createMobMotion()
+	destroyMobMotion();
+	local character = player.Character;
+	if not character then
+		return false;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return false;
+	end
+	mobControl.LastAutoRotate = humanoid.AutoRotate;
+	humanoid.AutoRotate = false;
+	local targetPart = Instance.new("Part");
+	targetPart.Name = "__HWAN_MobTarget";
+	targetPart.Size = Vector3.new(1, 1, 1);
+	targetPart.Transparency = 1;
+	targetPart.Anchored = true;
+	targetPart.CanCollide = false;
+	targetPart.CanQuery = false;
+	targetPart.CanTouch = false;
+	targetPart.CastShadow = false;
+	targetPart.CFrame = rootPart.CFrame;
+	targetPart.Parent = workspace;
+	local rootAttachment = Instance.new("Attachment");
+	rootAttachment.Name = "__HWAN_RootAttachment";
+	rootAttachment.Parent = rootPart;
+	local targetAttachment = Instance.new("Attachment");
+	targetAttachment.Name = "__HWAN_TargetAttachment";
+	targetAttachment.Parent = targetPart;
+	local alignPosition = Instance.new("AlignPosition");
+	alignPosition.Name = "__HWAN_AlignPosition";
+	alignPosition.Attachment0 = rootAttachment;
+	alignPosition.Attachment1 = targetAttachment;
+	alignPosition.ApplyAtCenterOfMass = true;
+	alignPosition.MaxForce = math.huge;
+	alignPosition.MaxVelocity = MOB_FLY_SPEED;
+	alignPosition.Responsiveness = MOB_RESPONSIVENESS;
+	alignPosition.RigidityEnabled = false;
+	alignPosition.ReactionForceEnabled = false;
+	alignPosition.Enabled = true;
+	alignPosition.Parent = rootPart;
+	local alignOrientation = Instance.new("AlignOrientation");
+	alignOrientation.Name = "__HWAN_AlignOrientation";
+	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment;
+	alignOrientation.Attachment0 = rootAttachment;
+	alignOrientation.MaxTorque = math.huge;
+	alignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+	alignOrientation.RigidityEnabled = false;
+	alignOrientation.ReactionTorqueEnabled = false;
+	alignOrientation.Enabled = true;
+	alignOrientation.CFrame = rootPart.CFrame;
+	alignOrientation.Parent = rootPart;
+	mobControl.TargetPart = targetPart;
+	mobControl.RootAttachment = rootAttachment;
+	mobControl.TargetAttachment = targetAttachment;
+	mobControl.AlignPosition = alignPosition;
+	mobControl.AlignOrientation = alignOrientation;
+	return true;
+end
+function updateMobMotion()
+	if (not runtimeAlive or not autoMobEnabled or not selectedMob) then
+		return;
+	end
+	if (autoFlightCourseEnabled or autoChestEnabled) then
+		return;
+	end
+	applyNoClip();
+	local character = player.Character;
+	if not character then
+		return;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return;
+	end
+	if (not mobControl.AlignPosition or not mobControl.AlignOrientation or not mobControl.TargetPart) then
+		if not createMobMotion() then
+			return;
+		end
+	end
+	local mobFolder = refreshMobFolderConnection();
+	if not mobFolder then
+		currentMobTarget = nil;
+		return;
+	end
+	if (not currentMobTarget or not currentMobTarget.Parent or (currentMobTarget.Name ~= selectedMob) or (currentMobTarget.Parent ~= mobFolder)) then
+		currentMobTarget = getNextMobTarget(selectedMob);
+	end
+	if not currentMobTarget then
+		mobControl.TargetPart.CFrame = rootPart.CFrame;
+		return;
+	end
+	local mobHumanoid = currentMobTarget:FindFirstChildOfClass("Humanoid");
+	if (mobHumanoid and (mobHumanoid.Health <= 0)) then
+		currentMobTarget = getNextMobTarget(selectedMob);
+		if not currentMobTarget then
+			mobControl.TargetPart.CFrame = rootPart.CFrame;
+			return;
+		end
+	end
+	local mobPivot = getMobPivot(currentMobTarget);
+	if not mobPivot then
+		currentMobTarget = getNextMobTarget(selectedMob);
+		return;
+	end
+	local offset;
+	if (selectedAngle == "Above") then
+		offset = Vector3.new(0, selectedDistance, 0);
+	elseif (selectedAngle == "Below") then
+		offset = Vector3.new(0, -selectedDistance, 0);
+	else
+		offset = -mobPivot.LookVector * selectedDistance;
+	end
+	local targetPosition = mobPivot.Position + offset;
+	mobControl.TargetPart.CFrame = CFrame.lookAt(targetPosition, mobPivot.Position);
+	mobControl.AlignPosition.MaxVelocity = MOB_FLY_SPEED;
+	mobControl.AlignPosition.Responsiveness = MOB_RESPONSIVENESS;
+	mobControl.AlignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+	mobControl.AlignOrientation.CFrame = CFrame.lookAt(rootPart.Position, mobPivot.Position);
+end
+function destroyFlightCourseMotion()
+	if flightCourseControl.AlignPosition then
+		pcall(function()
+			flightCourseControl.AlignPosition:Destroy();
+		end);
+		flightCourseControl.AlignPosition = nil;
+	end
+	if flightCourseControl.AlignOrientation then
+		pcall(function()
+			flightCourseControl.AlignOrientation:Destroy();
+		end);
+		flightCourseControl.AlignOrientation = nil;
+	end
+	if flightCourseControl.RootAttachment then
+		pcall(function()
+			flightCourseControl.RootAttachment:Destroy();
+		end);
+		flightCourseControl.RootAttachment = nil;
+	end
+	if flightCourseControl.TargetAttachment then
+		pcall(function()
+			flightCourseControl.TargetAttachment:Destroy();
+		end);
+		flightCourseControl.TargetAttachment = nil;
+	end
+	if flightCourseControl.TargetPart then
+		pcall(function()
+			flightCourseControl.TargetPart:Destroy();
+		end);
+		flightCourseControl.TargetPart = nil;
+	end
+	local character = player.Character;
+	if character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid");
+		local rootPart = character:FindFirstChild("HumanoidRootPart");
+		if (humanoid and (flightCourseControl.LastAutoRotate ~= nil)) then
+			humanoid.AutoRotate = flightCourseControl.LastAutoRotate;
+		end
+		if rootPart then
+			rootPart.AssemblyLinearVelocity = Vector3.zero;
+			rootPart.AssemblyAngularVelocity = Vector3.zero;
+		end
+	end
+	flightCourseControl.LastAutoRotate = nil;
+	flightCourseControl.NoClipCharacter = nil;
+end
+function createFlightCourseMotion()
+	destroyFlightCourseMotion();
+	local character = player.Character;
+	if not character then
+		return false;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return false;
+	end
+	flightCourseControl.LastAutoRotate = humanoid.AutoRotate;
+	humanoid.AutoRotate = false;
+	local targetPart = Instance.new("Part");
+	targetPart.Name = "__HWAN_FlightTarget";
+	targetPart.Size = Vector3.new(1, 1, 1);
+	targetPart.Transparency = 1;
+	targetPart.Anchored = true;
+	targetPart.CanCollide = false;
+	targetPart.CanQuery = false;
+	targetPart.CanTouch = false;
+	targetPart.CastShadow = false;
+	targetPart.CFrame = rootPart.CFrame;
+	targetPart.Parent = workspace;
+	local rootAttachment = Instance.new("Attachment");
+	rootAttachment.Name = "__HWAN_FlightRootAttachment";
+	rootAttachment.Parent = rootPart;
+	local targetAttachment = Instance.new("Attachment");
+	targetAttachment.Name = "__HWAN_FlightTargetAttachment";
+	targetAttachment.Parent = targetPart;
+	local alignPosition = Instance.new("AlignPosition");
+	alignPosition.Name = "__HWAN_FlightAlignPosition";
+	alignPosition.Attachment0 = rootAttachment;
+	alignPosition.Attachment1 = targetAttachment;
+	alignPosition.ApplyAtCenterOfMass = true;
+	alignPosition.MaxForce = math.huge;
+	alignPosition.MaxVelocity = FLIGHT_COURSE_SPEED;
+	alignPosition.Responsiveness = MOB_RESPONSIVENESS;
+	alignPosition.RigidityEnabled = false;
+	alignPosition.ReactionForceEnabled = false;
+	alignPosition.Enabled = true;
+	alignPosition.Parent = rootPart;
+	local alignOrientation = Instance.new("AlignOrientation");
+	alignOrientation.Name = "__HWAN_FlightAlignOrientation";
+	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment;
+	alignOrientation.Attachment0 = rootAttachment;
+	alignOrientation.MaxTorque = math.huge;
+	alignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+	alignOrientation.RigidityEnabled = false;
+	alignOrientation.ReactionTorqueEnabled = false;
+	alignOrientation.Enabled = true;
+	alignOrientation.CFrame = rootPart.CFrame;
+	alignOrientation.Parent = rootPart;
+	flightCourseControl.TargetPart = targetPart;
+	flightCourseControl.RootAttachment = rootAttachment;
+	flightCourseControl.TargetAttachment = targetAttachment;
+	flightCourseControl.AlignPosition = alignPosition;
+	flightCourseControl.AlignOrientation = alignOrientation;
+	return true;
+end
+function updateFlightCourseMotion()
+	if (not runtimeAlive or not autoFlightCourseEnabled) then
+		return;
+	end
+	applyNoClip();
+	local character = player.Character;
+	if not character then
+		return;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return;
+	end
+	if (not flightCourseControl.AlignPosition or not flightCourseControl.AlignOrientation or not flightCourseControl.TargetPart) then
+		if not createFlightCourseMotion() then
+			return;
+		end
+	end
+	local targetCFrame;
+	if (flightCourseStage == "start") then
+		targetCFrame = FLIGHT_COURSE_START_POSITION;
+	elseif (flightCourseStage == "waiting") then
+		targetCFrame = FLIGHT_COURSE_START_POSITION;
+		if (os.clock() >= flightCourseWaitUntil) then
+			receiveFlightCourseQuest();
+			flightCourseStage = "points";
+			flightCoursePointIndex = 1;
+		end
+	elseif (flightCourseStage == "points") then
+		if (flightCoursePointIndex <= #FLIGHT_COURSE_POINTS) then
+			targetCFrame = FLIGHT_COURSE_POINTS[flightCoursePointIndex];
+		else
+			flightCourseStage = "returning";
+			targetCFrame = FLIGHT_COURSE_START_POSITION;
+		end
+	elseif (flightCourseStage == "returning") then
+		targetCFrame = FLIGHT_COURSE_START_POSITION;
+		if ((rootPart.Position - targetCFrame.Position).Magnitude < 5) then
+			flightCourseStage = "waiting";
+			flightCourseWaitUntil = os.clock() + 0.2;
+		end
+	end
+	if not targetCFrame then
+		return;
+	end
+	flightCourseControl.TargetPart.CFrame = targetCFrame;
+	flightCourseControl.AlignPosition.MaxVelocity = FLIGHT_COURSE_SPEED;
+	flightCourseControl.AlignPosition.Responsiveness = MOB_RESPONSIVENESS;
+	flightCourseControl.AlignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+	flightCourseControl.AlignOrientation.CFrame = CFrame.lookAt(rootPart.Position, targetCFrame.Position);
+	local distance = (rootPart.Position - targetCFrame.Position).Magnitude;
+	if (distance < 5) then
+		if (flightCourseStage == "start") then
+			flightCourseStage = "waiting";
+			flightCourseWaitUntil = os.clock() + 0.2;
+		elseif (flightCourseStage == "points") then
+			flightCoursePointIndex = flightCoursePointIndex + 1;
+			if (flightCoursePointIndex > #FLIGHT_COURSE_POINTS) then
+				flightCourseStage = "returning";
+			end
+		end
+	end
+end
+local function getChestFolder()
+	return workspace:FindFirstChild("MouseFilter") and workspace.MouseFilter:FindFirstChild("MiscThings") and workspace.MouseFilter.MiscThings:FindFirstChild("AvailableChests");
+end
+local function getChests()
+	local folder = getChestFolder();
+	if not folder then
+		return {};
+	end
+	local chests = {};
+	for _, child in ipairs(folder:GetChildren()) do
+		if (child.Name == "OverworldChest") then
+			table.insert(chests, child);
+		end
+	end
+	return chests;
+end
+local function getNearestChest()
+	local character = player.Character;
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart");
+	if not rootPart then
+		return nil;
+	end
+	local chests = getChests();
+	if (#chests == 0) then
+		return nil;
+	end
+	local nearest = nil;
+	local minDist = math.huge;
+	for _, chest in ipairs(chests) do
+		local pos;
+		if chest:IsA("BasePart") then
+			pos = chest.Position;
+		else
+			local pivot = chest:GetPivot();
+			pos = pivot.Position;
+		end
+		if pos then
+			local dist = (rootPart.Position - pos).Magnitude;
+			if (dist < minDist) then
+				minDist = dist;
+				nearest = chest;
+			end
+		end
+	end
+	return nearest;
+end
+function destroyChestMotion()
+	if chestControl.AlignPosition then
+		pcall(function()
+			chestControl.AlignPosition:Destroy();
+		end);
+		chestControl.AlignPosition = nil;
+	end
+	if chestControl.AlignOrientation then
+		pcall(function()
+			chestControl.AlignOrientation:Destroy();
+		end);
+		chestControl.AlignOrientation = nil;
+	end
+	if chestControl.RootAttachment then
+		pcall(function()
+			chestControl.RootAttachment:Destroy();
+		end);
+		chestControl.RootAttachment = nil;
+	end
+	if chestControl.TargetAttachment then
+		pcall(function()
+			chestControl.TargetAttachment:Destroy();
+		end);
+		chestControl.TargetAttachment = nil;
+	end
+	if chestControl.TargetPart then
+		pcall(function()
+			chestControl.TargetPart:Destroy();
+		end);
+		chestControl.TargetPart = nil;
+	end
+	local character = player.Character;
+	if character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid");
+		local rootPart = character:FindFirstChild("HumanoidRootPart");
+		if (humanoid and (chestControl.LastAutoRotate ~= nil)) then
+			humanoid.AutoRotate = chestControl.LastAutoRotate;
+		end
+		if rootPart then
+			rootPart.AssemblyLinearVelocity = Vector3.zero;
+			rootPart.AssemblyAngularVelocity = Vector3.zero;
+		end
+	end
+	chestControl.LastAutoRotate = nil;
+	chestControl.NoClipCharacter = nil;
+end
+function createChestMotion()
+	destroyChestMotion();
+	local character = player.Character;
+	if not character then
+		return false;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return false;
+	end
+	chestControl.LastAutoRotate = humanoid.AutoRotate;
+	humanoid.AutoRotate = false;
+	local targetPart = Instance.new("Part");
+	targetPart.Name = "__HWAN_ChestTarget";
+	targetPart.Size = Vector3.new(1, 1, 1);
+	targetPart.Transparency = 1;
+	targetPart.Anchored = true;
+	targetPart.CanCollide = false;
+	targetPart.CanQuery = false;
+	targetPart.CanTouch = false;
+	targetPart.CastShadow = false;
+	targetPart.CFrame = rootPart.CFrame;
+	targetPart.Parent = workspace;
+	local rootAttachment = Instance.new("Attachment");
+	rootAttachment.Name = "__HWAN_ChestRootAttachment";
+	rootAttachment.Parent = rootPart;
+	local targetAttachment = Instance.new("Attachment");
+	targetAttachment.Name = "__HWAN_ChestTargetAttachment";
+	targetAttachment.Parent = targetPart;
+	local alignPosition = Instance.new("AlignPosition");
+	alignPosition.Name = "__HWAN_ChestAlignPosition";
+	alignPosition.Attachment0 = rootAttachment;
+	alignPosition.Attachment1 = targetAttachment;
+	alignPosition.ApplyAtCenterOfMass = true;
+	alignPosition.MaxForce = math.huge;
+	alignPosition.MaxVelocity = MOB_FLY_SPEED;
+	alignPosition.Responsiveness = MOB_RESPONSIVENESS;
+	alignPosition.RigidityEnabled = false;
+	alignPosition.ReactionForceEnabled = false;
+	alignPosition.Enabled = true;
+	alignPosition.Parent = rootPart;
+	local alignOrientation = Instance.new("AlignOrientation");
+	alignOrientation.Name = "__HWAN_ChestAlignOrientation";
+	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment;
+	alignOrientation.Attachment0 = rootAttachment;
+	alignOrientation.MaxTorque = math.huge;
+	alignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+	alignOrientation.RigidityEnabled = false;
+	alignOrientation.ReactionTorqueEnabled = false;
+	alignOrientation.Enabled = true;
+	alignOrientation.CFrame = rootPart.CFrame;
+	alignOrientation.Parent = rootPart;
+	chestControl.TargetPart = targetPart;
+	chestControl.RootAttachment = rootAttachment;
+	chestControl.TargetAttachment = targetAttachment;
+	chestControl.AlignPosition = alignPosition;
+	chestControl.AlignOrientation = alignOrientation;
+	return true;
+end
+function updateChestMotion()
+	if (not runtimeAlive or not autoChestEnabled) then
+		return;
+	end
+	applyNoClip();
+	local character = player.Character;
+	if not character then
+		return;
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid");
+	local rootPart = character:FindFirstChild("HumanoidRootPart");
+	if (not humanoid or not rootPart) then
+		return;
+	end
+	if (not chestControl.AlignPosition or not chestControl.AlignOrientation or not chestControl.TargetPart) then
+		if not createChestMotion() then
+			return;
+		end
+	end
+	local chests = getChests();
+	if (#chests == 0) then
+		autoChestEnabled = false;
+		destroyChestMotion();
+		setToggle(autoChestToggle, false);
+		autoChestToggle.Description.Text = "Chests: 0";
+		if (not autoMobEnabled and not autoFlightCourseEnabled and not (autoQuestEnabled and selectedQuest and (selectedQuest.MobName ~= nil))) then
+			setNoClip(character, false);
+		end
+		return;
+	end
+	local targetChest = getNearestChest();
+	if not targetChest then
+		autoChestEnabled = false;
+		destroyChestMotion();
+		setToggle(autoChestToggle, false);
+		autoChestToggle.Description.Text = "Chests: 0";
+		return;
+	end
+	local chestPos;
+	if targetChest:IsA("BasePart") then
+		chestPos = targetChest.Position;
+	else
+		local pivot = targetChest:GetPivot();
+		chestPos = pivot.Position;
+	end
+	local distance = (rootPart.Position - chestPos).Magnitude;
+	if (distance < 5) then
+		chestControl.TargetPart.CFrame = rootPart.CFrame;
+		chestControl.AlignOrientation.CFrame = rootPart.CFrame;
+	else
+		chestControl.TargetPart.CFrame = CFrame.new(chestPos);
+		chestControl.AlignPosition.MaxVelocity = MOB_FLY_SPEED;
+		chestControl.AlignPosition.Responsiveness = MOB_RESPONSIVENESS;
+		chestControl.AlignOrientation.Responsiveness = MOB_RESPONSIVENESS;
+		chestControl.AlignOrientation.CFrame = CFrame.lookAt(rootPart.Position, chestPos);
+	end
+	autoChestToggle.Description.Text = "Chests: " .. tostring(#chests);
+end
+local function refreshMobList()
+	clearDropdownList(mobDropdown);
+	local mobNames = getAvailableMobNames();
+	if (#mobNames == 0) then
+		addDropdownOption(mobDropdown, "No mobs available", function()
+		end);
+		if (mobDropdown.SelectedValue == nil) then
+			mobDropdown.Button.Text = mobDropdown.Placeholder;
+		end
+		return;
+	end
+	for _, mobName in ipairs(mobNames) do
+		addDropdownOption(mobDropdown, mobName, function()
+			if (mobDropdown.SelectedValue == mobName) then
+				mobDropdown.SelectedValue = nil;
+				selectedMob = nil;
+				currentMobTarget = nil;
+				mobDropdown.Button.Text = mobDropdown.Placeholder;
+				autoMobToggle.Description.Text = "Select a mob first";
+				if autoMobEnabled then
+					autoMobEnabled = false;
+					destroyMobMotion();
+					setToggle(autoMobToggle, false);
+				end
+			else
+				mobDropdown.SelectedValue = mobName;
+				selectedMob = mobName;
+				currentMobTarget = nil;
+				mobDropdown.Button.Text = mobName;
+				autoMobToggle.Description.Text = mobName;
+				if autoMobEnabled then
+					currentMobTarget = getNextMobTarget(selectedMob);
+				end
+			end
+		end);
+	end
+	if (mobDropdown.SelectedValue == nil) then
+		mobDropdown.Button.Text = mobDropdown.Placeholder;
+	end
+end
+connect(workspace.ChildAdded, function(child)
+	if child.Name:match("^BadEntities%d+$") then
+		if autoMobEnabled then
+			connectMobFolder(child);
+			currentMobTarget = getNextMobTarget(selectedMob);
+		end
+		if mobDropdown.List.Visible then
+			refreshMobList();
+			positionDropdown(mobDropdown);
+		end
+	end
+end);
+connect(workspace.ChildRemoved, function(child)
+	if (child == mobControl.LastFolder) then
+		disconnectMobFolderConnections();
+		mobControl.LastFolder = nil;
+		currentMobTarget = nil;
+	end
+end);
+setupDropdown(skillDropdown, refreshSkillList);
+setupDropdown(angleDropdown);
+setupDropdown(distanceDropdown);
+setupDropdown(mobDropdown, refreshMobList);
+setupDropdown(grimoireStorageDropdown);
+refreshQuestList();
+setupDropdown(questDropdown);
+addDropdownOption(angleDropdown, "Behind", function()
+	angleDropdown.SelectedValue = "Behind";
+	selectedAngle = "Behind";
+	angleDropdown.Button.Text = "Behind";
+end);
+addDropdownOption(angleDropdown, "Above", function()
+	angleDropdown.SelectedValue = "Above";
+	selectedAngle = "Above";
+	angleDropdown.Button.Text = "Above";
+end);
+addDropdownOption(angleDropdown, "Below", function()
+	angleDropdown.SelectedValue = "Below";
+	selectedAngle = "Below";
+	angleDropdown.Button.Text = "Below";
+end);
+angleDropdown.Button.Text = "Behind";
+for _, dist in ipairs({2,3,4,5,6,8,10}) do
+	addDropdownOption(distanceDropdown, tostring(dist), function()
+		distanceDropdown.SelectedValue = tostring(dist);
+		selectedDistance = dist;
+		distanceDropdown.Button.Text = tostring(dist);
+	end);
+end
+distanceDropdown.Button.Text = "4";
+addDropdownOption(grimoireStorageDropdown, "Storage A", function()
+	grimoireStorageDropdown.SelectedValue = "Storage A";
+	grimoireStorageDropdown.Button.Text = "Storage A";
+	openGrimoireStorage("A", "Soda (Grimoire Storage)");
+end);
+addDropdownOption(grimoireStorageDropdown, "Storage B", function()
+	grimoireStorageDropdown.SelectedValue = "Storage B";
+	grimoireStorageDropdown.Button.Text = "Storage B";
+	openGrimoireStorage("B", "Th3Nbody (Grimoire Storage)");
+end);
+addDropdownOption(grimoireStorageDropdown, "Storage C", function()
+	grimoireStorageDropdown.SelectedValue = "Storage C";
+	grimoireStorageDropdown.Button.Text = "Storage C";
+	openGrimoireStorage("C", "pangaranjaja (Grimoire Storage)");
+end);
+local function stopAllAutoExcept(except)
+	if (autoMobEnabled and (except ~= "mob")) then
+		autoMobEnabled = false;
+		currentMobTarget = nil;
+		destroyMobMotion();
+		setToggle(autoMobToggle, false);
+		autoMobToggle.Description.Text = selectedMob or "Select a mob first";
+	end
+	if (autoQuestEnabled and (except ~= "quest")) then
+		autoQuestEnabled = false;
+		questReceiveLock = false;
+		setToggle(autoQuestToggle, false);
+	end
+	if (autoFlightCourseEnabled and (except ~= "flight")) then
+		autoFlightCourseEnabled = false;
+		destroyFlightCourseMotion();
+	end
+	if (autoTrainBodyEnabled and (except ~= "train")) then
+		autoTrainBodyEnabled = false;
+		setToggle(autoTrainBodyToggle, false);
+		autoTrainBodyToggle.Description.Text = "Train body automatically";
+	end
+	if (autoChestEnabled and (except ~= "chest")) then
+		autoChestEnabled = false;
+		destroyChestMotion();
+		setToggle(autoChestToggle, false);
+		autoChestToggle.Description.Text = "Chests: " .. tostring(#getChests());
+	end
+end
+connect(autoMobToggle.Toggle.Activated, function()
+	if not selectedMob then
+		autoMobEnabled = false;
+		currentMobTarget = nil;
+		destroyMobMotion();
+		setToggle(autoMobToggle, false);
+		autoMobToggle.Description.Text = "Select a mob first";
+		return;
+	end
+	autoMobEnabled = not autoMobEnabled;
+	if autoMobEnabled then
+		stopAllAutoExcept("mob");
+		autoMobEnabled = true;
+		currentMobTarget = nil;
+		local folder = refreshMobFolderConnection();
+		if folder then
+			currentMobTarget = getNextMobTarget(selectedMob);
+		end
+		createMobMotion();
+		applyNoClip();
+		autoMobToggle.Description.Text = selectedMob;
+	else
+		currentMobTarget = nil;
+		destroyMobMotion();
+		local character = player.Character;
+		if (character and not autoQuestEnabled and not autoFlightCourseEnabled and not autoChestEnabled) then
+			setNoClip(character, false);
+		end
+		autoMobToggle.Description.Text = selectedMob;
+	end
+	setToggle(autoMobToggle, autoMobEnabled);
+end);
+connect(autoQuestToggle.Toggle.Activated, function()
+	if not selectedQuest then
+		autoQuestEnabled = false;
+		questReceiveLock = false;
+		setToggle(autoQuestToggle, false);
+		autoQuestToggle.Description.Text = "Select a quest first";
+		return;
+	end
+	autoQuestEnabled = not autoQuestEnabled;
+	if autoQuestEnabled then
+		stopAllAutoExcept("quest");
+		autoQuestEnabled = true;
+		autoQuestToggle.Description.Text = selectedQuest.Name;
+		questNeedsSpawnReset = true;
+		if selectedQuest.IsFlightCourse then
+			autoFlightCourseEnabled = true;
+		else
+			autoFlightCourseEnabled = false;
+		end
+		task.spawn(function()
+			if not runtimeAlive then
+				return;
+			end
+			questSpawnResetInProgress = true;
+			if selectedQuest.SetSpawn then
+				pcall(selectedQuest.SetSpawn);
+			end
+			task.wait(0.5);
+			resetCharacter();
+			questSpawnResetInProgress = false;
+			questNeedsSpawnReset = false;
+		end);
+	else
+		questReceiveLock = false;
+		autoFlightCourseEnabled = false;
+		destroyFlightCourseMotion();
+		if autoMobEnabled then
+			autoMobEnabled = false;
+			currentMobTarget = nil;
+			destroyMobMotion();
+			setToggle(autoMobToggle, false);
+			autoMobToggle.Description.Text = selectedMob or "Select a mob first";
+		end
+		autoQuestToggle.Description.Text = selectedQuest.Name;
+	end
+	setToggle(autoQuestToggle, autoQuestEnabled);
+end);
+connect(autoChestToggle.Toggle.Activated, function()
+	autoChestEnabled = not autoChestEnabled;
+	if autoChestEnabled then
+		stopAllAutoExcept("chest");
+		autoChestEnabled = true;
+		local chests = getChests();
+		if (#chests == 0) then
+			autoChestEnabled = false;
+			autoChestToggle.Description.Text = "Chests: 0";
+			setToggle(autoChestToggle, false);
+			return;
+		end
+		autoChestToggle.Description.Text = "Chests: " .. tostring(#chests);
+		createChestMotion();
+		applyNoClip();
+	else
+		destroyChestMotion();
+		local character = player.Character;
+		if (character and not autoMobEnabled and not autoFlightCourseEnabled and not (autoQuestEnabled and selectedQuest and (selectedQuest.MobName ~= nil))) then
+			setNoClip(character, false);
+		end
+		autoChestToggle.Description.Text = "Chests: " .. tostring(#getChests());
+	end
+	setToggle(autoChestToggle, autoChestEnabled);
+end);
+connect(autoTrainBodyToggle.Toggle.Activated, function()
+	autoTrainBodyEnabled = not autoTrainBodyEnabled;
+	if autoTrainBodyEnabled then
+		stopAllAutoExcept("train");
+		autoTrainBodyEnabled = true;
+		autoTrainBodyToggle.Description.Text = "Training body...";
+		receiveTrainBodyQuest();
+	else
+		autoTrainBodyToggle.Description.Text = "Train body automatically";
+	end
+	setToggle(autoTrainBodyToggle, autoTrainBodyEnabled);
+end);
+connect(checkBodyProgressButton.Activated, receiveBodyProgress);
+connect(resetGrimoireButton.Activated, resetGrimoire);
+connect(spinGrimoireButton.Activated, spinGrimoire);
+connect(upgradeWandButton.Activated, upgradeWand);
+task.spawn(function()
+	local currentMission = player:WaitForChild("CurrentMission");
+	if not runtimeAlive then
+		return;
+	end
+	connect(currentMission.ChildAdded, function()
+		questReceiveLock = false;
+		unquesting = false;
+	end);
+	connect(currentMission.ChildRemoved, function()
+		questReceiveLock = false;
+		unquesting = false;
+		if questSwitching then
+			return;
+		end
+		if (autoQuestEnabled and not questNeedsSpawnReset and not selectedQuest.IsFlightCourse) then
+			task.defer(function()
+				if runtimeAlive then
+					tryReceiveQuest();
+				end
+			end);
+		end
+		if autoTrainBodyEnabled then
+			task.defer(function()
+				if runtimeAlive then
+					receiveTrainBodyQuest();
+				end
+			end);
+		end
+	end);
+end);
+task.spawn(function()
+	while runtimeAlive do
+		if (autoQuestEnabled and selectedQuest and not questSwitching and not questNeedsSpawnReset and currentMissionIsEmpty() and not selectedQuest.IsFlightCourse) then
+			tryReceiveQuest();
+		end
+		task.wait(0.1);
+	end
+end);
+task.spawn(function()
+	while runtimeAlive do
+		local shouldAttack = autoMobEnabled or (autoQuestEnabled and selectedQuest and (selectedQuest.MobName ~= nil));
+		if shouldAttack then
+			local skillToUse = selectedSkill;
+			if (autoQuestEnabled and selectedQuest and selectedQuest.ForceSkill) then
+				skillToUse = selectedQuest.ForceSkill;
+			end
+			if skillToUse then
+				local character = player.Character;
+				if character then
+					local humanoid = character:FindFirstChildOfClass("Humanoid");
+					if humanoid then
+						local tool = character:FindFirstChild(skillToUse);
+						if not tool then
+							local backpack = player:FindFirstChild("Backpack");
+							if backpack then
+								local backpackTool = backpack:FindFirstChild(skillToUse);
+								if (backpackTool and backpackTool:IsA("Tool")) then
+									pcall(function()
+										humanoid:EquipTool(backpackTool);
+									end);
+									task.wait(0.05);
+								end
+							end
+							tool = character:FindFirstChild(skillToUse);
+						end
+						if (runtimeAlive and shouldAttack and tool and tool:IsA("Tool") and (tool.Parent == character)) then
+							if ((skillToUse == "Crimson Fist") or (skillToUse == "Leo Fist")) then
+								local remoteEvent = tool:FindFirstChild("RemoteEvent");
+								if (remoteEvent and remoteEvent:IsA("RemoteEvent")) then
+									pcall(function()
+										remoteEvent:FireServer("Punch");
+									end);
+								end
+								task.wait(SPECIAL_SKILL_INTERVAL);
+							else
+								pcall(function()
+									tool:Activate();
+								end);
+								task.wait(SKILL_INTERVAL);
+							end
+						else
+							task.wait(0.05);
+						end
+					else
+						task.wait(0.05);
+					end
+				else
+					task.wait(0.05);
+				end
+			else
+				task.wait(0.05);
+			end
+		else
+			task.wait(0.05);
+		end
+	end
+end);
+task.spawn(function()
+	while runtimeAlive do
+		if autoTrainBodyEnabled then
+			local character = player.Character;
+			if character then
+				local humanoid = character:FindFirstChildOfClass("Humanoid");
+				if humanoid then
+					local tool = character:FindFirstChild("Train");
+					if not tool then
+						local backpack = player:FindFirstChild("Backpack");
+						if backpack then
+							local backpackTool = backpack:FindFirstChild("Train");
+							if (backpackTool and backpackTool:IsA("Tool")) then
+								pcall(function()
+									humanoid:EquipTool(backpackTool);
+								end);
+								task.wait(0.05);
+							end
+						end
+						tool = character:FindFirstChild("Train");
+					end
+					if (tool and tool:IsA("Tool") and (tool.Parent == character)) then
+						pcall(function()
+							tool:Activate();
+						end);
+						task.wait(SKILL_INTERVAL);
+					else
+						task.wait(0.05);
+					end
+				else
+					task.wait(0.05);
+				end
+			else
+				task.wait(0.05);
+			end
+		else
+			task.wait(0.05);
+		end
+	end
+end);
+connect(RunService.Heartbeat, function()
+	if (autoMobEnabled and not autoFlightCourseEnabled and not autoChestEnabled) then
+		updateMobMotion();
+	end
+	if autoFlightCourseEnabled then
+		updateFlightCourseMotion();
+	end
+	if autoChestEnabled then
+		updateChestMotion();
+	end
+end);
+local function setPageButton(button, enabled)
+	if enabled then
+		TweenService:Create(button, TWEEN_SMOOTH, {BackgroundColor3=COLORS.White,TextColor3=COLORS.BlackText}):Play();
+	else
+		TweenService:Create(button, TWEEN_SMOOTH, {BackgroundColor3=COLORS.Panel2,TextColor3=COLORS.Muted}):Play();
+	end
+end
+local function switchPage(page, activeButton, inactiveButton)
+	closeAllDropdowns();
+	autoFarmPage.Visible = false;
+	miscPage.Visible = false;
+	page.Visible = true;
+	setPageButton(activeButton, true);
+	setPageButton(inactiveButton, false);
+	task.defer(function()
+		if runtimeAlive then
+			page.CanvasPosition = Vector2.new(0, 0);
+		end
+	end);
+end
+setPageButton(autoFarmPageButton, true);
+setPageButton(miscPageButton, false);
+connect(autoFarmPageButton.Activated, function()
+	switchPage(autoFarmPage, autoFarmPageButton, miscPageButton);
+end);
+connect(miscPageButton.Activated, function()
+	switchPage(miscPage, miscPageButton, autoFarmPageButton);
+end);
+local showButton = Instance.new("TextButton");
+showButton.Size = UDim2.fromOffset(46, 46);
+showButton.Position = UDim2.new(0.5, -210, 0.5, -23);
+showButton.BackgroundColor3 = COLORS.Dark;
+showButton.BorderSizePixel = 0;
+showButton.Text = "HIDE";
+showButton.TextColor3 = COLORS.White;
+showButton.TextSize = 9;
+showButton.Font = Enum.Font.GothamBold;
+showButton.AutoButtonColor = false;
+showButton.Active = true;
+showButton.ZIndex = 100;
+showButton.Parent = gui;
+local showCorner = Instance.new("UICorner");
+showCorner.CornerRadius = UDim.new(0, 10);
+showCorner.Parent = showButton;
+local showStroke = Instance.new("UIStroke");
+showStroke.Color = COLORS.Panel3;
+showStroke.Thickness = 1;
+showStroke.Parent = showButton;
+local showWasDragged = makeDraggable(showButton, showButton);
+local function updateShowButton(hidden)
+	if hidden then
+		showButton.Text = "SHOW";
+	else
+		showButton.Text = "HIDE";
+	end
+	TweenService:Create(showButton, TWEEN_FAST, {BackgroundColor3=((hidden and COLORS.Panel2) or COLORS.Dark)}):Play();
+end
+connect(showButton.Activated, function()
+	if showWasDragged() then
+		return;
+	end
+	main.Visible = not main.Visible;
+	if not main.Visible then
+		closeAllDropdowns();
+	end
+	updateShowButton(not main.Visible);
+end);
+setToggle(autoMobToggle, false);
+setToggle(autoQuestToggle, false);
+setToggle(autoChestToggle, false);
+setToggle(autoTrainBodyToggle, false);
+updateShowButton(false);
+selectedAngle = "Behind";
+angleDropdown.Button.Text = "Behind";
+selectedDistance = 4;
+distanceDropdown.Button.Text = "4";
+task.spawn(function()
+	while runtimeAlive do
+		if not autoChestEnabled then
+			local chests = getChests();
+			autoChestToggle.Description.Text = "Chests: " .. tostring(#chests);
+		end
+		task.wait(1);
+	end
+end);
+connect(player.CharacterAdded, function()
+	if not runtimeAlive then
+		return;
+	end
+	noClipState = {};
+	currentMobTarget = nil;
+	destroyMobMotion();
+	destroyFlightCourseMotion();
+	destroyChestMotion();
+	if (autoQuestEnabled and selectedQuest) then
+		if (questNeedsSpawnReset or questSpawnResetInProgress) then
+			return;
+		end
+		if selectedQuest.IsFlightCourse then
+			autoFlightCourseEnabled = true;
+			flightCourseStage = "start";
+			flightCoursePointIndex = 1;
+			flightCourseWaitUntil = 0;
+			task.delay(0.5, function()
+				if (runtimeAlive and autoFlightCourseEnabled) then
+					createFlightCourseMotion();
+					applyNoClip();
+				end
+			end);
+		else
+			local mobName = selectedQuest.MobName;
+			if mobName then
+				selectedMob = mobName;
+				mobDropdown.SelectedValue = mobName;
+				mobDropdown.Button.Text = mobName;
+				autoMobToggle.Description.Text = mobName;
+				autoMobEnabled = true;
+				setToggle(autoMobToggle, true);
+				autoMobToggle.Description.Text = mobName;
+				refreshMobFolderConnection();
+				currentMobTarget = getNextMobTarget(mobName);
+				createMobMotion();
+				applyNoClip();
+				task.delay(0.5, function()
+					if (runtimeAlive and autoQuestEnabled) then
+						tryReceiveQuest();
+					end
+				end);
+			end
+		end
+	end
+	if autoMobEnabled then
+		task.delay(0.5, function()
+			if (runtimeAlive and autoMobEnabled) then
+				refreshMobFolderConnection();
+				currentMobTarget = getNextMobTarget(selectedMob);
+				createMobMotion();
+			end
+		end);
+	end
+	if autoChestEnabled then
+		task.delay(0.5, function()
+			if (runtimeAlive and autoChestEnabled) then
+				if (#getChests() > 0) then
+					createChestMotion();
+				else
+					autoChestEnabled = false;
+					destroyChestMotion();
+					setToggle(autoChestToggle, false);
+					autoChestToggle.Description.Text = "Chests: 0";
+				end
+			end
+		end);
+	end
+	task.delay(0.35, function()
+		if runtimeAlive then
+			refreshSkillList();
+			refreshMobList();
+		end
+	end);
+end);
